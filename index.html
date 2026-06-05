@@ -1,0 +1,1520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kali Linux Hardening — Write-up</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #080b0f;
+  --surface: #0f1318;
+  --surface2: #161b22;
+  --surface3: #1c2128;
+  --border: #21262d;
+  --border2: #30363d;
+  --green: #3fb950;
+  --green-dim: #0d2318;
+  --green-glow: rgba(63,185,80,0.12);
+  --amber: #d29922;
+  --red: #f85149;
+  --blue: #58a6ff;
+  --purple: #bc8cff;
+  --text: #c9d1d9;
+  --text2: #8b949e;
+  --text3: #484f58;
+  --mono: 'IBM Plex Mono', monospace;
+  --sans: 'Outfit', sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  min-height: 100vh;
+  line-height: 1.6;
+}
+
+/* Scanline overlay */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.03) 2px,
+    rgba(0,0,0,0.03) 4px
+  );
+  pointer-events: none;
+  z-index: 999;
+}
+
+/* Layout */
+.layout {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  min-height: 100vh;
+}
+
+/* Sidebar */
+.sidebar {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 1.5rem 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-logo {
+  padding: 0 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 1rem;
+}
+
+.logo-badge {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--green);
+  background: var(--green-dim);
+  border: 1px solid rgba(63,185,80,0.3);
+  padding: 2px 8px;
+  border-radius: 2px;
+  display: inline-block;
+  margin-bottom: 8px;
+  letter-spacing: 0.12em;
+}
+
+.logo-title {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--text);
+}
+
+.logo-sub {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text3);
+  margin-top: 4px;
+}
+
+.nav-section {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  padding: 0.5rem 1.25rem 0.25rem;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 1.25rem;
+  font-size: 12px;
+  color: var(--text2);
+  cursor: pointer;
+  transition: all 0.15s;
+  border-left: 2px solid transparent;
+  text-decoration: none;
+}
+
+.nav-item:hover { color: var(--text); background: var(--surface2); }
+.nav-item.active { color: var(--green); border-left-color: var(--green); background: var(--green-dim); }
+
+.nav-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  flex-shrink: 0;
+}
+
+.nav-item.active .nav-dot { background: var(--green); border-color: var(--green); }
+
+.sidebar-score {
+  margin-top: auto;
+  padding: 1.25rem;
+  border-top: 1px solid var(--border);
+}
+
+.score-mini {
+  font-family: var(--mono);
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--green);
+  line-height: 1;
+}
+
+.score-mini-label {
+  font-size: 11px;
+  color: var(--text3);
+  margin-top: 4px;
+}
+
+.progress-mini {
+  margin-top: 8px;
+  height: 3px;
+  background: var(--surface3);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-mini-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--green);
+  width: 0;
+  transition: width 1.4s cubic-bezier(0.4,0,0.2,1);
+  box-shadow: 0 0 8px rgba(63,185,80,0.5);
+}
+
+/* Main content */
+.main {
+  overflow-y: auto;
+  height: 100vh;
+  scroll-behavior: smooth;
+}
+
+.main-inner {
+  max-width: 780px;
+  padding: 2.5rem 2rem 4rem;
+}
+
+/* Sections */
+.section {
+  margin-bottom: 3rem;
+  animation: fadeUp 0.5s ease both;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 1.25rem;
+}
+
+.section-num {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text3);
+  width: 24px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.section-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+h2 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+
+h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text2);
+  margin-bottom: 0.75rem;
+  font-family: var(--mono);
+}
+
+/* Hero */
+.hero {
+  padding: 2.5rem 0 1rem;
+  margin-bottom: 2rem;
+}
+
+.hero-tag {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--green);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hero-tag::before {
+  content: '';
+  width: 20px;
+  height: 1px;
+  background: var(--green);
+}
+
+.hero h1 {
+  font-size: clamp(2.2rem, 4vw, 3rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  margin-bottom: 1rem;
+}
+
+.hero h1 em {
+  font-style: normal;
+  color: var(--green);
+}
+
+.hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+}
+
+.hero-meta span { display: flex; align-items: center; gap: 5px; }
+
+/* Score board */
+.scoreboard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 1.5rem 0;
+}
+
+.scoreboard-top {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.score-big {
+  padding: 1.5rem 2rem;
+  border-right: 1px solid var(--border);
+  text-align: center;
+}
+
+.score-big-num {
+  font-family: var(--mono);
+  font-size: 72px;
+  font-weight: 700;
+  color: var(--green);
+  line-height: 1;
+  text-shadow: 0 0 30px rgba(63,185,80,0.25);
+}
+
+.score-big-label {
+  font-size: 11px;
+  color: var(--text3);
+  margin-top: 4px;
+  font-family: var(--mono);
+}
+
+.score-stats {
+  padding: 1.5rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.stat {
+  background: var(--surface2);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.stat-val {
+  font-family: var(--mono);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.stat-lbl {
+  font-size: 10px;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-top: 2px;
+}
+
+.scoreboard-bars {
+  padding: 1.25rem 1.5rem;
+}
+
+.bar-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 8px 0;
+}
+
+.bar-lbl {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text3);
+  width: 72px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.bar-track {
+  flex: 1;
+  height: 4px;
+  background: var(--surface3);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  width: 0;
+  transition: width 1.3s cubic-bezier(0.4,0,0.2,1);
+}
+
+.bar-val {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  width: 32px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* Pills row */
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.pill {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  border: 1px solid;
+}
+
+.pill-g { color: var(--green); border-color: rgba(63,185,80,0.4); background: var(--green-dim); }
+.pill-a { color: var(--amber); border-color: rgba(210,153,34,0.3); background: rgba(210,153,34,0.06); }
+
+/* Cards */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin: 1rem 0;
+  overflow: hidden;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0.9rem 1.25rem;
+  cursor: pointer;
+  transition: background 0.15s;
+  user-select: none;
+}
+
+.card-header:hover { background: var(--surface2); }
+
+.card-icon {
+  width: 28px; height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.icon-g { background: var(--green-dim); color: var(--green); border: 1px solid rgba(63,185,80,0.3); }
+.icon-a { background: rgba(210,153,34,0.08); color: var(--amber); border: 1px solid rgba(210,153,34,0.3); }
+.icon-r { background: rgba(248,81,73,0.08); color: var(--red); border: 1px solid rgba(248,81,73,0.3); }
+.icon-b { background: rgba(88,166,255,0.08); color: var(--blue); border: 1px solid rgba(88,166,255,0.3); }
+.icon-p { background: rgba(188,140,255,0.08); color: var(--purple); border: 1px solid rgba(188,140,255,0.3); }
+
+.card-title {
+  font-size: 13px;
+  font-weight: 600;
+  flex: 1;
+}
+
+.card-badge {
+  font-family: var(--mono);
+  font-size: 9px;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.badge-g { background: var(--green-dim); color: var(--green); border: 1px solid rgba(63,185,80,0.3); }
+.badge-s { background: var(--surface2); color: var(--text3); border: 1px solid var(--border); }
+.badge-a { background: rgba(210,153,34,0.08); color: var(--amber); border: 1px solid rgba(210,153,34,0.3); }
+
+.chevron {
+  color: var(--text3);
+  font-size: 10px;
+  transition: transform 0.2s;
+}
+
+.card.open .chevron { transform: rotate(180deg); }
+
+.card-body {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.4s cubic-bezier(0.4,0,0.2,1);
+}
+
+.card.open .card-body { max-height: 1200px; }
+
+.card-inner {
+  padding: 0 1.25rem 1.25rem;
+  border-top: 1px solid var(--border);
+}
+
+.card-desc {
+  font-size: 13px;
+  color: var(--text2);
+  line-height: 1.7;
+  padding: 0.75rem 0 0.5rem;
+}
+
+/* Code */
+pre {
+  background: #010409;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1rem;
+  overflow-x: auto;
+  position: relative;
+  margin: 0.5rem 0;
+}
+
+pre .filename {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text3);
+  display: block;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+code {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: #e6edf3;
+  line-height: 1.8;
+  white-space: pre;
+}
+
+.copy-btn {
+  position: absolute;
+  top: 8px; right: 8px;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  color: var(--text3);
+  font-family: var(--mono);
+  font-size: 9px;
+  padding: 3px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s;
+  letter-spacing: 0.05em;
+}
+
+.copy-btn:hover { color: var(--green); border-color: rgba(63,185,80,0.4); }
+.copy-btn.copied { color: var(--green); border-color: rgba(63,185,80,0.6); }
+
+/* Syntax colors */
+.kw { color: #ff7b72; }
+.str { color: #a5d6ff; }
+.cmt { color: #484f58; font-style: italic; }
+.fn { color: #d2a8ff; }
+.num { color: #79c0ff; }
+.op { color: #ffa657; }
+
+/* Checklist */
+.checklist { list-style: none; }
+.checklist li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 7px 0;
+  font-size: 12px;
+  border-bottom: 1px solid rgba(33,38,45,0.6);
+  line-height: 1.5;
+}
+.checklist li:last-child { border-bottom: none; }
+.ci { flex-shrink: 0; margin-top: 1px; font-family: var(--mono); font-size: 11px; }
+.ci-g { color: var(--green); }
+.ci-r { color: var(--red); }
+.ci-a { color: var(--amber); }
+.ci-m { color: var(--text3); }
+
+/* Lynis ID tags */
+.lynis-id {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text3);
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  padding: 1px 6px;
+  border-radius: 2px;
+  margin-left: 4px;
+  white-space: nowrap;
+}
+
+/* Grid 2 cols */
+.g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0.75rem 0; }
+.g3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 0.75rem 0; }
+
+.mini-stat {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.75rem;
+}
+.mini-stat-val { font-family: var(--mono); font-size: 16px; font-weight: 700; }
+.mini-stat-lbl { font-size: 10px; color: var(--text3); margin-top: 2px; }
+
+/* Timeline */
+.timeline { position: relative; padding-left: 1.5rem; }
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 5px; top: 6px; bottom: 6px;
+  width: 1px;
+  background: var(--border);
+}
+.tl-item {
+  position: relative;
+  margin-bottom: 1.25rem;
+}
+.tl-item::before {
+  content: '';
+  position: absolute;
+  left: -1.5rem;
+  top: 5px;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  border: 1px solid var(--green);
+  background: var(--bg);
+}
+.tl-item.done::before { background: var(--green); }
+.tl-score {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--green);
+  font-weight: 600;
+}
+.tl-desc { font-size: 12px; color: var(--text2); margin-top: 2px; }
+
+/* Alert boxes */
+.alert {
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 0.75rem 0;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.alert-icon { flex-shrink: 0; font-family: var(--mono); font-size: 11px; margin-top: 1px; }
+.alert-g { background: var(--green-dim); border: 1px solid rgba(63,185,80,0.25); color: #7ee787; }
+.alert-a { background: rgba(210,153,34,0.08); border: 1px solid rgba(210,153,34,0.25); color: var(--amber); }
+.alert-r { background: rgba(248,81,73,0.08); border: 1px solid rgba(248,81,73,0.25); color: #ffa198; }
+
+/* Animations */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.cursor {
+  display: inline-block;
+  width: 8px; height: 14px;
+  background: var(--green);
+  margin-left: 2px;
+  vertical-align: middle;
+  animation: blink 1s infinite;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text3); }
+
+@media (max-width: 700px) {
+  .layout { grid-template-columns: 1fr; }
+  .sidebar { display: none; }
+  .main-inner { padding: 1.5rem 1rem 3rem; }
+  .scoreboard-top { grid-template-columns: 1fr; }
+  .score-big { border-right: none; border-bottom: 1px solid var(--border); }
+  .g2, .g3 { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div class="layout">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-badge">&#9632; write-up</div>
+      <div class="logo-title">Kali Linux<br>Hardening</div>
+      <div class="logo-sub">kmrlbhr &bull; 2026-06-05</div>
+    </div>
+
+    <div class="nav-section">Overview</div>
+    <a class="nav-item active" href="#overview" onclick="setActive(this)"><span class="nav-dot"></span>Score &amp; results</a>
+    <a class="nav-item" href="#timeline" onclick="setActive(this)"><span class="nav-dot"></span>Timeline</a>
+
+    <div class="nav-section" style="margin-top:0.5rem">Hardening steps</div>
+    <a class="nav-item" href="#tools" onclick="setActive(this)"><span class="nav-dot"></span>Install tools</a>
+    <a class="nav-item" href="#services" onclick="setActive(this)"><span class="nav-dot"></span>Enable services</a>
+    <a class="nav-item" href="#kernel" onclick="setActive(this)"><span class="nav-dot"></span>Kernel sysctl</a>
+    <a class="nav-item" href="#auth" onclick="setActive(this)"><span class="nav-dot"></span>Authentication</a>
+    <a class="nav-item" href="#audit" onclick="setActive(this)"><span class="nav-dot"></span>Auditd rules</a>
+    <a class="nav-item" href="#integrity" onclick="setActive(this)"><span class="nav-dot"></span>File integrity</a>
+    <a class="nav-item" href="#filesystem" onclick="setActive(this)"><span class="nav-dot"></span>Filesystem</a>
+    <a class="nav-item" href="#network" onclick="setActive(this)"><span class="nav-dot"></span>Network</a>
+    <a class="nav-item" href="#boot" onclick="setActive(this)"><span class="nav-dot"></span>Boot security</a>
+    <a class="nav-item" href="#compilers" onclick="setActive(this)"><span class="nav-dot"></span>Compilers</a>
+
+    <div class="nav-section" style="margin-top:0.5rem">Reference</div>
+    <a class="nav-item" href="#skipped" onclick="setActive(this)"><span class="nav-dot"></span>Skipped items</a>
+    <a class="nav-item" href="#checklist" onclick="setActive(this)"><span class="nav-dot"></span>Full checklist</a>
+
+    <div class="sidebar-score">
+      <div class="score-mini" id="sideScore">0</div>
+      <div class="score-mini-label">/ 100 hardening index</div>
+      <div class="progress-mini">
+        <div class="progress-mini-fill" id="miniBar"></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main" id="mainScroll">
+  <div class="main-inner">
+
+    <!-- Hero -->
+    <div class="hero" id="overview">
+      <div class="hero-tag">security hardening</div>
+      <h1>Kali Linux<br><em>Hardening</em><span class="cursor"></span></h1>
+      <div class="hero-meta">
+        <span>&#128197; 2026-06-05</span>
+        <span>&#128187; kali-laptop</span>
+        <span>&#9874; Lynis 3.1.6</span>
+        <span>&#128100; kmrlbhr</span>
+        <span>&#128276; Kali Rolling</span>
+      </div>
+    </div>
+
+    <!-- Scoreboard -->
+    <div class="scoreboard">
+      <div class="scoreboard-top">
+        <div class="score-big">
+          <div class="score-big-num" id="mainScore">0</div>
+          <div class="score-big-label">hardening index</div>
+        </div>
+        <div class="score-stats">
+          <div class="stat">
+            <div class="stat-val" style="color:var(--green)">0</div>
+            <div class="stat-lbl">Warnings</div>
+          </div>
+          <div class="stat">
+            <div class="stat-val" style="color:var(--green)">0</div>
+            <div class="stat-lbl">Suggestions</div>
+          </div>
+          <div class="stat">
+            <div class="stat-val" style="color:var(--blue)">+29</div>
+            <div class="stat-lbl">Points gained</div>
+          </div>
+          <div class="stat">
+            <div class="stat-val" style="color:var(--purple)">252</div>
+            <div class="stat-lbl">Tests passed</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="scoreboard-bars">
+        <div class="bar-row">
+          <span class="bar-lbl">Baseline</span>
+          <div class="bar-track"><div class="bar-fill" data-w="59" style="background:var(--red)"></div></div>
+          <span class="bar-val" style="color:var(--red)">59</span>
+        </div>
+        <div class="bar-row">
+          <span class="bar-lbl">+ tools</span>
+          <div class="bar-track"><div class="bar-fill" data-w="78" style="background:var(--amber)"></div></div>
+          <span class="bar-val" style="color:var(--amber)">78</span>
+        </div>
+        <div class="bar-row">
+          <span class="bar-lbl">+ kernel</span>
+          <div class="bar-track"><div class="bar-fill" data-w="86" style="background:var(--blue)"></div></div>
+          <span class="bar-val" style="color:var(--blue)">86</span>
+        </div>
+        <div class="bar-row">
+          <span class="bar-lbl">+ final</span>
+          <div class="bar-track"><div class="bar-fill" data-w="88" style="background:var(--green); box-shadow:0 0 6px rgba(63,185,80,0.4)"></div></div>
+          <span class="bar-val" style="color:var(--green)">88</span>
+        </div>
+      </div>
+
+      <div class="pills">
+        <span class="pill pill-g">&#10003; Firewall active</span>
+        <span class="pill pill-g">&#10003; AppArmor enabled</span>
+        <span class="pill pill-g">&#10003; fail2ban running</span>
+        <span class="pill pill-g">&#10003; auditd enabled</span>
+        <span class="pill pill-g">&#10003; AIDE + SHA512</span>
+        <span class="pill pill-g">&#10003; rkhunter baselined</span>
+        <span class="pill pill-g">&#10003; GRUB password set</span>
+        <span class="pill pill-g">&#10003; Kernel hardened</span>
+        <span class="pill pill-a">&#9888; kernel.modules_disabled skipped</span>
+      </div>
+    </div>
+
+    <!-- Timeline -->
+    <div class="section" id="timeline">
+      <div class="section-header">
+        <span class="section-num">00</span>
+        <h2>Timeline</h2>
+        <div class="section-line"></div>
+      </div>
+      <div class="timeline">
+        <div class="tl-item done">
+          <div class="tl-score">59 / 100 &mdash; Baseline</div>
+          <div class="tl-desc">Initial Lynis scan. 3 warnings, 43 suggestions. No firewall, no AppArmor, no fail2ban, missing malware scanner, 14 sysctl values wrong.</div>
+        </div>
+        <div class="tl-item done">
+          <div class="tl-score">78 / 100 &mdash; Round 1</div>
+          <div class="tl-desc">Installed ufw, fail2ban, auditd, rkhunter, libpam-pwquality, libpam-tmpdir, needrestart, apt-listbugs, apt-listchanges, debsums. Enabled all services. Applied sysctl kernel values.</div>
+        </div>
+        <div class="tl-item done">
+          <div class="tl-score">86 / 100 &mdash; Round 2</div>
+          <div class="tl-desc">Installed AIDE with SHA512, sysstat, acct, unattended-upgrades. Set auditd rules, fail2ban jail.local, login banners, password policy, hashing rounds, umask, /proc hidepid, session timeout.</div>
+        </div>
+        <div class="tl-item done">
+          <div class="tl-score">88 / 100 &mdash; Final</div>
+          <div class="tl-desc">Fixed AIDE database, restricted all compilers (cpp, as/assembler, mingw cross-compilers) to root only. Fixed system account home directory permissions. Set GRUB pbkdf2-sha512 password. 0 warnings, 0 suggestions.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 1: Install tools -->
+    <div class="section" id="tools">
+      <div class="section-header">
+        <span class="section-num">01</span>
+        <h2>Install security tools</h2>
+        <div class="section-line"></div>
+      </div>
+
+      <div class="alert alert-a">
+        <span class="alert-icon">&#9888;</span>
+        <div>SecLists is stored under <code>/usr/share/seclists/</code> on this system, not <code>/usr/share/wordlists/</code>. rockyou.txt requires extraction: <code>tar -xzf /usr/share/seclists/Passwords/Leaked-Databases/rockyou.txt.tar.gz</code></div>
+      </div>
+
+      <div class="card open">
+        <div class="card-header" onclick="toggleCard(this)">
+          <div class="card-icon icon-g">apt</div>
+          <div class="card-title">Install all missing packages</div>
+          <span class="card-badge badge-g">required</span>
+          <span class="chevron">&#9660;</span>
+        </div>
+        <div class="card-body"><div class="card-inner">
+          <p class="card-desc">Install everything Lynis flagged as missing in one command. This covers firewall, intrusion detection, file integrity, PAM modules, audit tools, and package management utilities.</p>
+          <pre><code><span class="cmt"># Core security tools</span>
+<span class="fn">apt install</span> ufw fail2ban auditd rkhunter \
+  libpam-pwquality libpam-tmpdir \
+  needrestart apt-listbugs apt-listchanges \
+  debsums apt-show-versions <span class="op">-y</span>
+
+<span class="cmt"># File integrity + accounting</span>
+<span class="fn">apt install</span> aide sysstat acct unattended-upgrades <span class="op">-y</span>
+<button class="copy-btn" onclick="copyCode(this)">copy</button></code></pre>
+        </div></div>
+      </div>
+    </div>
+
+    <!-- Step 2: Services -->
+    <div class="section" id="services">
+      <div class="section-header">
+        <span class="section-num">02</span>
+        <h2>Enable services</h2>
+        <div class="section-line"></div>
+      </div>
+
+      <div class="g2">
+        <div class="mini-stat"><div class="mini-stat-val" style="color:var(--green)">UFW</div><div class="mini-stat-lbl">deny incoming / allow outgoing</div></div>
+        <div class="mini-stat"><div class="mini-stat-val" style="color:var(--green)">AppArmor</div><div class="mini-stat-lbl">MAC framework enabled</div></div>
+        <div class="mini-stat"><div class="mini-stat-val" style="color:var(--green)">fail2ban</div><div class="mini-stat-lbl">jail.local configured</div></div>
+        <div class="mini-stat"><div class="mini-stat-val" style="color:var(--green)">auditd</div><div class="mini-stat-lbl">comprehensive ruleset</div></div>
+      </div>
+
+      <div class="card open">
+        <div class="card-header" onclick="toggleCard(this)">
+          <div class="card-icon icon-b">svc</div>
+          <div class="card-title">Enable and start all services</div>
+          <span class="card-badge badge-g">done</span>
+          <span class="chevron">&#9660;</span>
+        </div>
+        <div class="card-body"><div class="card-inner">
+          <pre><code><span class="cmt"># Firewall — deny all incoming by default</span>
+<span class="fn">ufw</span> default deny incoming
+<span class="fn">ufw</span> default allow outgoing
+<span class="fn">ufw</span> enable
+
+<span class="cmt"># Security services</span>
+<span class="fn">systemctl</span> enable auditd   &amp;&amp; systemctl start auditd
+<span class="fn">systemctl</span> enable fail2ban  &amp;&amp; systemctl start fail2ban
+<span class="fn">systemctl</span> enable apparmor  &amp;&amp; systemctl start apparmor
+<span class="fn">systemctl</span> enable sysstat   &amp;&amp; systemctl start sysstat
+<span class="fn">systemctl</span> enable psacct    &amp;&amp; systemctl start psacct
+
+<span class="cmt"># Protect fail2ban config from upgrades</span>
+<span class="fn">cp</span> /etc/fail2ban/jail.conf /etc/fail2ban/jail.local
+<span class="fn">systemctl</span> restart fail2ban
+<button class="copy-btn" onclick="copyCode(this)">copy</button></code></pre>
+        </div></div>
+      </div>
+    </div>
+
+    <!-- Step 3: Kernel -->
+    <div class="section" id="kernel">
+      <div class="section-header">
+        <span class="section-num">03</span>
+        <h2>Kernel hardening (sysctl)</h2>
+        <div class="section-line"></div>
+      </div>
+
+      <p style="font-size:13px; color:var(--text2); margin-bottom:1rem; line-height:1.7">16 kernel parameters hardened covering memory protection, BPF JIT hardening, ptrace scope, network redirect blocking, and martian packet logging. Note: <code style="font-family:var(--mono); font-size:11px; color:var(--amber)">kernel.modules_disabled=1</code> intentionally skipped — breaks Kali drivers.</p>
+
+      <div class="card open">
+        <div class="card-header" onclick="toggleCard(this)">
+          <div class="card-icon icon-p">sys</div>
+          <div class="card-title">Apply sysctl values</div>
+          <span class="card-badge badge-g">36/37 OK</span>
+          <span class="chevron">&#9660;</span>
+        </div>
+        <div class="card-body"><div class="card-inner">
+          <pre><code><span class="fn">cat</span> >> /etc/sysctl.conf << <span class="str">'EOF'</span>
+<span class="cmt"># Kernel hardening</span>
+kernel.dmesg_restrict = <span class="num">1</span>
+kernel.kptr_restrict = <span class="num">2</span>
+kernel.sysrq = <span class="num">0</span>
+kernel.unprivileged_bpf_disabled = <span class="num">1</span>
+kernel.yama.ptrace_scope = <span class="num">1</span>
+dev.tty.ldisc_autoload = <span class="num">0</span>
+fs.protected_fifos = <span class="num">2</span>
+
+<span class="cmt"># Network hardening</span>
+net.ipv4.conf.all.accept_redirects = <span class="num">0</span>
+net.ipv4.conf.default.accept_redirects = <span class="num">0</span>
+net.ipv4.conf.all.send_redirects = <span class="num">0</span>
+net.ipv4.conf.all.log_martians = <span class="num">1</span>
+net.ipv4.conf.default.log_martians = <span class="num">1</span>
+net.ipv4.conf.all.rp_filter = <span class="num">1</span>
+net.ipv6.conf.all.accept_redirects = <span class="num">0</span>
+net.ipv6.conf.default.accept_redirects = <span class="num">0</span>
+net.core.bpf_jit_harden = <span class="num">2</span>
+<span class="str">EOF</span>
+
+<span class="fn">sysctl</span> -p
+<button class="copy-btn" onclick="copyCode(this)">copy</button></code></pre>
+          <div class="alert alert-a" style="margin-top:0.75rem">
+            <span class="alert-icon">&#9888;</span>
+            <div>sysctl values revert if VPN reconnects. Run <code style="font-family:var(--mono)">sysctl -p</code> again to re-apply.</div>
+          </div>
+        </div></div>
+      </div>
+    </div>
+
+    <!-- Step 4: Auth -->
+    <div class="section" id="auth">
+      <div class="section-header">
+        <span class="section-num">04</span>
+        <h2>Authentication hardening</h2>
+        <div class="section-line"></div>
+      </div>
+
+      <div class="card open">
+        <div class="card-header" onclick="toggleCard(this)">
+          <div class="card-icon icon-g">pam</div>
+          <div class="card-title">Password policy &amp; aging</div>
+          <span class="card-badge badge-g">done</span>
+          <span class="chevron">&#9660;</span>
+        </div>
+        <div class="card-body"><div class="card-inner">
+          <pre><code><span class="cmt"># PAM password strength (12 char min, complexity required)</span>
+<span class="fn">cat</span> > /etc/security/pwquality.conf << <span class="str">'EOF'</span>
+minlen = 12
+dcredit = -1
+ucredit = -1
+ocredit = -1
+lcredit = -1
+maxrepeat = 3
+<span class="str">EOF</span>
+
+<span class="cmt"># Password aging</span>
+<span class="fn">sed</span> -i <span class="str">'s/^PASS_MAX_DAYS.*/PASS_MAX_DAYS\t90/'</span> /etc/login.defs
+<span class="fn">sed</span> -i <span class="str">'s/^PASS_MIN_DAYS.*/PASS_MIN_DAYS\t1/'</span>  /etc/login.defs
+<span class="fn">sed</span> -i <span class="str">'s/^PASS_WARN_AGE.*/PASS_WARN_AGE\t7/'</span>  /etc/login.defs
+
+<span class="cmt"># SHA512 hashing rounds &amp; umask</span>
+<span class="fn">echo</span> <span class="str">"SHA_CRYPT_MIN_ROUNDS 65536"</span>  >> /etc/login.defs
+<span class="fn">echo</span> <span class="str">"SHA_CRYPT_MAX_ROUNDS 655360"</span> >> /etc/login.defs
+<span class="fn">echo</span> <span class="str">"UMASK           027"</span>         >> /etc/login.defs
+<span class="fn">echo</span> <span class="str">"umask 027"</span> >> /etc/bash.bashrc
+<span class="fn">echo</span> <span class="str">"umask 027"</span> >> /etc/profile
+
+<span class="cmt"># Session timeout (15 min)</span>
+<span class="fn">echo</span> <span class="str">"TMOUT=900"</span>        >> /etc/profile
+<span class="fn">echo</span> <span class="str">"readonly TMOUT"</span>  >> /etc/profile
+<span class="fn">echo</span> <span class="str">"export TMOUT"</span>    >> /etc/profile
+
+<span class="cmt"># Apply expiry to accounts</span>
+<span class="fn">chage</span> --maxdays 90 --mindays 1 --warndays 7 root
+<span class="fn">chage</span> --maxdays 90 --mindays 1 --warndays 7 kmrlbhr
+<button class="copy-btn" onclick="copyCode(this)">copy</button></code></pre>
+        </div></div>
+      </div>
+    </div>
+
+    <!-- Step 5: Auditd -->
+    <div class="section" id="audit">
+      <div class="section-header">
+        <span class="section-num">05</span>
+        <h2>Auditd rules</h2>
+        <div class="section-line"></div>
+      </div>
+
+      <div class="card open">
+        <div class="card-header" onclick="toggleCard(this)">
+          <div class="card-icon icon-a">aud</div>
+          <div class="card-title">Comprehensive audit ruleset</div>
+          <span class="card-badge badge-g">done</span>
+          <span class="chevron">&#9660;</span>
+        </div>
+        <div class="card-body"><div class="card-inner">
+          <p class="card-desc">Audit rules covering identity changes, privilege escalation, SSH config, network config, cron jobs, and kernel module loading.</p>
+          <pre><code><span class="fn">cat</span> > /etc/audit/rules.d/hardening.rules << <span class="str">'EOF'</span>
+-D
+-b 8192
+-f 1
+
+<span class="cmt"># Identity changes</span>
+-w /etc/passwd  -p wa -k identity
+-w /etc/shadow  -p wa -k identity
+-w /etc/group   -p wa -k identity
+-w /etc/gshadow -p wa -k identity
+-w /etc/sudoers    -p wa -k sudoers
+-w /etc/sudoers.d/ -p wa -k sudoers
+
+<span class="cmt"># Privilege escalation</span>
+-w /var/log/auth.log -p wa -k auth
+-w /bin/su           -p x  -k priv_esc
+-w /usr/bin/sudo     -p x  -k priv_esc
+
+<span class="cmt"># SSH &amp; network</span>
+-w /etc/ssh/sshd_config -p wa -k ssh
+-w /etc/hosts           -p wa -k network
+-w /etc/network/        -p wa -k network
+
+<span class="cmt"># Cron</span>
+-w /etc/crontab  -p wa -k cron
+-w /etc/cron.d/  -p wa -k cron
+
+<span class="cmt"># Kernel modules</span>
+-w /sbin/insmod  -p x -k modules
+-w /sbin/rmmod   -p x -k modules
+-w /sbin/modprobe -p x -k modules
+<span class="str">EOF</span>
+
+<span class="fn">augenrules</span> --load
+<span class="fn">systemctl</span> restart auditd
+<button class="copy-btn" onclick="copyCode(this)">copy</button></code></pre>
+        </div></div>
+      </div>
+    </div>
+
+    <!-- Step 6: Integrity -->
+    <div class="section" id="integrity">
+      <div class="section-header">
+        <span class="section-num">06</span>
+        <h2>File integrity monitoring</h2>
+        <div class="section-line"></div>
+      </div>
+
+      <div class="card open">
+        <div class="card-header" onclick="toggleCard(this)">
+          <div class="card-icon icon-g">aid</div>
+          <div class="card-title">AIDE — SHA512 baseline</div>
+          <span class="card-badge badge-g">done</span>
+          <span class="chevron">&#9660;</span>
+        </div>
+        <div class="card-body"><div class="card-inner">
+          <p class="card-desc">Initialize AIDE with explicit SHA512 checksums. The database build takes 2–13 minutes depending on filesystem size.</p>
+          <pre><code><span class="cmt"># Override default checksum to SHA512 explicitly</span>
+<span class="fn">sed</span> -i <span class="str">'s/^Checksums = H/Checksums = sha512/'</span> /etc/aide/aide.conf
+<span class="fn">grep</span> <span class="str">"^Checksums"</span> /etc/aide/aide.conf  <span class="cmt"># verify</span>
+
+<span class="cmt"># Build database (~2-13 min)</span>
+<span class="fn">aide</span> -c /etc/aide/aide.conf --init
+<span class="fn">cp</span> /var/lib/aide/aide.db.new /var/lib/aide/aide.db
+
+<span class="cmt"># Verify database exists</span>
+<span class="fn">ls</span> -lh /var/lib/aide/aide.db
+<button class="copy-btn" onclick="copyCode(this)">copy</button></code></pre>
+        </div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header" onclick="toggleCard(this)">
+          <div class="card-icon icon-a">rkh</div>
+          <div class="card-title">rkhunter — rootkit baseline</div>
+          <span class="card-badge badge-g">done</span>
+          <span class="chevron">&#9660;</span>
+        </div>
+        <div class="card-body"><div class="card-inner">
+          <pre><code><span class="cmt"># Update definitions (may fail offline — ok)</span>
+<span class="fn">rkhunter</span> --update
+
+<span class="cmt"># Build file properties baseline</span>
+<span class="fn">rkhunter</span> --propupd
+<button class="copy-btn" onclick="copyCode(this)">copy</button></code></pre>
+        </div></div>
+      </div>
+    </div>
+
+    <!-- Step 7: Filesystem -->
+    <div class="section" id="filesystem">
+      <div class="section-header">
+        <span class="section-num">07</span>
+        <h2>Filesystem hardening</h2>
+        <div class="section-line"></div>
+      </div>
+
+      <div class="card open">
+        <div class="card-header" onclick="toggleCard(this)">
+          <div class="card-icon icon-b">fs</div>
+          <div class="card-title">Permissions, /proc, cron dirs</div>
+          <span class="card-badge badge-g">done</span>
+          <span class="chevron">&#9660;</span>
+        </div>
+        <div class="card-body"><div class="card-inner">
+          <pre><code><span class="cmt"># Home directory permissions</span>
+<span class="fn">chmod</span> 750 /home /home/kmrlbhr
+<span class="fn">chmod</span> 700 /root
+
+<span class="cmt"># System account home dirs (found by checking getent passwd)</span>
+<span class="fn">chmod</span> 750 /usr/sbin /usr/games /var/cache/man
+<span class="fn">chmod</span> 750 /var/mail /var/backups /run/sshd
+<span class="fn">chmod</span> 750 /var/lib/misc /var/lib/colord
+<span class="fn">chmod</span> 750 /var/lib/saned /var/lib/postgresql
+<span class="fn">chmod</span> 750 /var/lib/openvpn/chroot
+
+<span class="cmt"># Cron directory permissions</span>
+<span class="fn">chmod</span> 700 /etc/cron.d /etc/cron.daily /etc/cron.hourly
+<span class="fn">chmod</span> 700 /etc/cron.weekly /etc/cron.monthly
+<span class="fn">chmod</span> 600 /etc/crontab
+<span class="fn">chmod</span> 750 /etc/sudoers.d
+<span class="fn">chmod</span> 600 /etc/ssh/sshd_config
+
+<span class="cmt"># Hide /proc from other users</span>
+<span class="fn">echo</span> <span class="str">"proc /proc proc defaults,hidepid=2 0 0"</span> >> /etc/fstab
+<span class="fn">mount</span> -o remount,hidepid=2 /proc
+
+<span class="cmt"># debsums weekly cron job</span>
+<span class="fn">sed</span> -i <span class="str">'s/^CRON_CHECK=.*/CRON_CHECK=weekly/'</span> /etc/default/debsums
+<button class="copy-btn" onclick="copyCode(this)">copy</button></code></pre>
+        </div></div>
+      </div>
+    </div>
+
+    <!-- Step 8: Network -->
+    <div class="section" id="network">
+      <div class="section-header">
+        <span class="section-num">08</span>
+        <h2>Network &amp; device hardening</h2>
+        <div class="section-line"></div>
+      </div>
+
+      <div class="card open">
+        <div class="card-header" onclick="toggleCard(this)">
+          <div class="card-icon icon-r">mod</div>
+          <div class="card-title">Disable unused protocols &amp; devices</div>
+          <span class="card-badge badge-g">done</span>
+          <span class="chevron">&#9660;</span>
+        </div>
+        <div class="card-body"><div class="card-inner">
+          <pre><code><span class="fn">cat</span> >> /etc/modprobe.d/hardening.conf << <span class="str">'EOF'</span>
+<span class="cmt"># Unused network protocols</span>
+install dccp /bin/false
+install sctp /bin/false
+install rds  /bin/false
+install tipc /bin/false
+
+<span class="cmt"># Storage devices</span>
+install usb-storage   /bin/false
+install firewire-ohci /bin/false
+<span class="str">EOF</span>
+<button class="copy-btn" onclick="copyCode(this)">copy</button></code></pre>
+        </div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header" onclick="toggleCard(this)">
+          <div class="card-icon icon-b">dns</div>
+          <div class="card-title">Hardened DNS + immutable resolv.conf</div>
+          <span class="card-badge badge-g">done</span>
+          <span class="chevron">&#9660;</span>
+        </div>
+        <div class="card-body"><div class="card-inner">
+          <pre><code><span class="cmt"># Remove immutable flag if set</span>
+<span class="fn">chattr</span> -i /etc/resolv.conf
+
+<span class="fn">cat</span> > /etc/resolv.conf << <span class="str">'EOF'</span>
+nameserver 8.8.8.8
+nameserver 8.8.4.4
+nameserver 1.1.1.1
+<span class="str">EOF</span>
+
+<span class="cmt"># Lock from being overwritten by NetworkManager/DHCP</span>
+<span class="fn">chattr</span> +i /etc/resolv.conf
+<button class="copy-btn" onclick="copyCode(this)">copy</button></code></pre>
+        </div></div>
+      </div>
+    </div>
+
+    <!-- Step 9: Boot -->
+    <div class="section" id="boot">
+      <div class="section-header">
+        <span class="section-num">09</span>
+        <h2>Boot security</h2>
+        <div class="section-line"></div>
+      </div>
+
+      <div class="alert alert-g">
+        <span class="alert-icon">&#10003;</span>
+        <div>Using <code style="font-family:var(--mono)">--unrestricted</code> flag so normal booting still works without entering the GRUB password. Only editing boot entries requires authentication.</div>
+      </div>
+
+      <div class="card open">
+        <div class="card-header" onclick="toggleCard(this)">
+          <div class="card-icon icon-a">grb</div>
+          <div class="card-title">GRUB pbkdf2-sha512 password</div>
+          <span class="card-badge badge-g">done</span>
+          <span class="chevron">&#9660;</span>
+        </div>
+        <div class="card-body"><div class="card-inner">
+          <pre><code><span class="cmt"># Step 1: Generate hash (interactive)</span>
+<span class="fn">grub-mkpasswd-pbkdf2</span>
+<span class="cmt"># Copy the full hash that starts with grub.pbkdf2.sha512...</span>
+
+<span class="cmt"># Step 2: Add to GRUB</span>
+<span class="fn">cat</span> >> /etc/grub.d/40_custom << <span class="str">'EOF'</span>
+set superusers="root"
+password_pbkdf2 root &lt;PASTE_YOUR_HASH_HERE&gt;
+<span class="str">EOF</span>
+
+<span class="cmt"># Step 3: Allow normal boot without password</span>
+<span class="fn">sed</span> -i <span class="str">'s/^CLASS=.*/CLASS="--class gnu-linux --class gnu --class os --unrestricted"/'</span> \
+  /etc/grub.d/10_linux
+
+<span class="cmt"># Step 4: Apply</span>
+<span class="fn">update-grub</span>
+<button class="copy-btn" onclick="copyCode(this)">copy</button></code></pre>
+        </div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header" onclick="toggleCard(this)">
+          <div class="card-icon icon-g">ban</div>
+          <div class="card-title">Login banners</div>
+          <span class="card-badge badge-g">done</span>
+          <span class="chevron">&#9660;</span>
+        </div>
+        <div class="card-body"><div class="card-inner">
+          <pre><code><span class="fn">cat</span> > /etc/issue << <span class="str">'EOF'</span>
+WARNING: Unauthorized access to this system is prohibited.
+All activity is monitored and logged. Disconnect immediately.
+<span class="str">EOF</span>
+
+<span class="fn">cp</span> /etc/issue /etc/issue.net
+<button class="copy-btn" onclick="copyCode(this)">copy</button></code></pre>
+        </div></div>
+      </div>
+    </div>
+
+    <!-- Step 10: Compilers -->
+    <div class="section" id="compilers">
+      <div class="section-header">
+        <span class="section-num">10</span>
+        <h2>Compiler hardening</h2>
+        <div class="section-line"></div>
+      </div>
+
+      <p style="font-size:13px; color:var(--text2); margin-bottom:1rem; line-height:1.7">Lynis checks <code style="font-family:var(--mono); font-size:11px">as</code>, <code style="font-family:var(--mono); font-size:11px">cc</code>, <code style="font-family:var(--mono); font-size:11px">gcc</code>, and <code style="font-family:var(--mono); font-size:11px">clang</code> — following symlinks to real binaries. The GNU assembler (<code style="font-family:var(--mono); font-size:11px">as</code>) was the final culprit along with mingw cross-compilers.</p>
+
+      <div class="card open">
+        <div class="card-header" onclick="toggleCard(this)">
+          <div class="card-icon icon-r">gcc</div>
+          <div class="card-title">Restrict all compilers to root only</div>
+          <span class="card-badge badge-g">done</span>
+          <span class="chevron">&#9660;</span>
+        </div>
+        <div class="card-body"><div class="card-inner">
+          <pre><code><span class="cmt"># Restrict cpp (follows symlink chain to real binary)</span>
+<span class="fn">chmod</span> o-rx /usr/bin/cpp
+<span class="fn">chmod</span> o-rx /usr/bin/cpp-15
+<span class="fn">chmod</span> o-rx /usr/bin/x86_64-linux-gnu-cpp-15
+
+<span class="cmt"># Restrict as/assembler (Lynis treats as compiler)</span>
+<span class="fn">chmod</span> o-rx /usr/bin/as
+<span class="fn">chmod</span> o-rx /usr/bin/x86_64-linux-gnu-as
+
+<span class="cmt"># Restrict mingw cross-compilers</span>
+<span class="fn">find</span> /usr/bin -name <span class="str">"*mingw*cpp*"</span> \
+              -o -name <span class="str">"*mingw*gcc*"</span> | \
+  xargs chmod o-rx 2>/dev/null
+
+<span class="fn">find</span> /etc/alternatives -name <span class="str">"*mingw*cpp*"</span> \
+                        -o -name <span class="str">"*mingw*gcc*"</span> | \
+  xargs chmod o-rx 2>/dev/null
+
+<span class="cmt"># Verify — should show r-x--- (750) for all</span>
+<span class="fn">ls</span> -la /usr/bin/as /usr/bin/cpp /usr/bin/x86_64-linux-gnu-as
+<button class="copy-btn" onclick="copyCode(this)">copy</button></code></pre>
+          <div class="alert alert-g" style="margin-top:0.75rem">
+            <span class="alert-icon">&#10003;</span>
+            <div>Root can still compile normally. This only restricts non-root users from running compilers — safe for a pentest machine where you operate as root.</div>
+          </div>
+        </div></div>
+      </div>
+    </div>
+
+    <!-- Skipped -->
+    <div class="section" id="skipped">
+      <div class="section-header">
+        <span class="section-num">11</span>
+        <h2>Intentionally skipped</h2>
+        <div class="section-line"></div>
+      </div>
+
+      <div class="alert alert-r">
+        <span class="alert-icon">&#9888;</span>
+        <div>88/100 is the <strong>maximum achievable score</strong> on a functional Kali pentest laptop without a full reinstall. The remaining 12 points require changes that would break the system or require repartitioning.</div>
+      </div>
+
+      <ul class="checklist" style="margin-top:1rem">
+        <li>
+          <span class="ci ci-r">&#10007;</span>
+          <div><strong>kernel.modules_disabled=1</strong> <span class="lynis-id">KRNL-6000</span><br>Setting to 1 after boot prevents loading any kernel modules. Breaks network adapters, USB devices, Kali drivers, and most offensive tools. Incompatible with pentesting.</div>
+        </li>
+        <li>
+          <span class="ci ci-r">&#10007;</span>
+          <div><strong>Separate /home partition</strong> <span class="lynis-id">FILE-6310</span><br>Requires full disk repartitioning and OS reinstall. Not feasible on a working machine mid-engagement.</div>
+        </li>
+        <li>
+          <span class="ci ci-r">&#10007;</span>
+          <div><strong>Separate /var partition</strong> <span class="lynis-id">FILE-6310</span><br>Same — requires reinstall. /var contains logs, databases, and package cache; moving it live risks corruption.</div>
+        </li>
+        <li>
+          <span class="ci ci-m">&#8212;</span>
+          <div><strong>External log host</strong> <span class="lynis-id">LOGG-2154</span><br>No remote syslog server available. Would require infrastructure setup outside scope of this engagement.</div>
+        </li>
+        <li>
+          <span class="ci ci-m">&#8212;</span>
+          <div><strong>Automation tooling</strong> <span class="lynis-id">TOOL-5002</span><br>Chef/Puppet/Ansible not relevant for a standalone pentest laptop.</div>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Full checklist -->
+    <div class="section" id="checklist">
+      <div class="section-header">
+        <span class="section-num">12</span>
+        <h2>Full checklist</h2>
+        <div class="section-line"></div>
+      </div>
+
+      <div class="g2" style="margin-bottom:1rem">
+        <div>
+          <h3>Security services</h3>
+          <ul class="checklist">
+            <li><span class="ci ci-g">+</span>UFW firewall (deny in / allow out)</li>
+            <li><span class="ci ci-g">+</span>fail2ban + jail.local</li>
+            <li><span class="ci ci-g">+</span>AppArmor MAC framework</li>
+            <li><span class="ci ci-g">+</span>auditd + comprehensive rules</li>
+            <li><span class="ci ci-g">+</span>rkhunter (baseline created)</li>
+            <li><span class="ci ci-g">+</span>AIDE + SHA512 database</li>
+            <li><span class="ci ci-g">+</span>sysstat + process accounting</li>
+            <li><span class="ci ci-g">+</span>unattended-upgrades</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Kernel &amp; network</h3>
+          <ul class="checklist">
+            <li><span class="ci ci-g">+</span>kernel.dmesg_restrict=1</li>
+            <li><span class="ci ci-g">+</span>kernel.kptr_restrict=2</li>
+            <li><span class="ci ci-g">+</span>kernel.sysrq=0</li>
+            <li><span class="ci ci-g">+</span>kernel.yama.ptrace_scope=1</li>
+            <li><span class="ci ci-g">+</span>net BPF JIT harden=2</li>
+            <li><span class="ci ci-g">+</span>IP redirects blocked</li>
+            <li><span class="ci ci-g">+</span>Martian logging enabled</li>
+            <li><span class="ci ci-g">+</span>Reverse path filtering=1</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Authentication</h3>
+          <ul class="checklist">
+            <li><span class="ci ci-g">+</span>PAM pwquality (minlen=12)</li>
+            <li><span class="ci ci-g">+</span>libpam-tmpdir enabled</li>
+            <li><span class="ci ci-g">+</span>Password aging (90/1/7)</li>
+            <li><span class="ci ci-g">+</span>SHA512 hashing rounds 65536</li>
+            <li><span class="ci ci-g">+</span>Umask 027</li>
+            <li><span class="ci ci-g">+</span>Session timeout 900s</li>
+            <li><span class="ci ci-g">+</span>Account expiry set</li>
+            <li><span class="ci ci-g">+</span>sudoers.d permissions</li>
+          </ul>
+        </div>
+        <div>
+          <h3>System &amp; boot</h3>
+          <ul class="checklist">
+            <li><span class="ci ci-g">+</span>GRUB pbkdf2-sha512 password</li>
+            <li><span class="ci ci-g">+</span>Login banners set</li>
+            <li><span class="ci ci-g">+</span>USB storage disabled</li>
+            <li><span class="ci ci-g">+</span>FireWire disabled</li>
+            <li><span class="ci ci-g">+</span>dccp/sctp/rds/tipc blocked</li>
+            <li><span class="ci ci-g">+</span>/proc hidepid=2</li>
+            <li><span class="ci ci-g">+</span>Compilers root-only</li>
+            <li><span class="ci ci-g">+</span>Home dir perms fixed</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div style="text-align:center; padding:2rem 0; border-top:1px solid var(--border); font-family:var(--mono); font-size:10px; color:var(--text3); margin-top:1rem">
+      kmrlbhr &nbsp;&bull;&nbsp; 2026-06-05 &nbsp;&bull;&nbsp; Lynis 3.1.6 &nbsp;&bull;&nbsp; 88/100 &nbsp;&bull;&nbsp; 0 warnings &nbsp;&bull;&nbsp; 0 suggestions
+    </div>
+
+  </div>
+  </main>
+
+</div>
+
+<script>
+// Animate score counter
+function animCounter(id, target, duration) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  let start = null;
+  function step(ts) {
+    if (!start) start = ts;
+    const p = Math.min((ts - start) / duration, 1);
+    const ease = 1 - Math.pow(1 - p, 3);
+    el.textContent = Math.floor(ease * target);
+    if (p < 1) requestAnimationFrame(step);
+    else el.textContent = target;
+  }
+  requestAnimationFrame(step);
+}
+
+// Animate bars
+function animBars() {
+  document.querySelectorAll('.bar-fill').forEach((b, i) => {
+    const w = b.dataset.w;
+    setTimeout(() => { b.style.width = w + '%'; }, 200 + i * 120);
+  });
+  // Mini sidebar bar
+  setTimeout(() => {
+    const mb = document.getElementById('miniBar');
+    if (mb) mb.style.width = '88%';
+  }, 800);
+}
+
+// Toggle cards
+function toggleCard(header) {
+  header.parentElement.classList.toggle('open');
+}
+
+// Nav active state
+function setActive(el) {
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  el.classList.add('active');
+}
+
+// Copy code
+function copyCode(btn) {
+  const pre = btn.parentElement;
+  const clone = pre.cloneNode(true);
+  clone.querySelector('.copy-btn')?.remove();
+  clone.querySelector('.filename')?.remove();
+  let text = clone.textContent.trim();
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = 'copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'copy'; btn.classList.remove('copied'); }, 2000);
+  });
+}
+
+// Scroll spy
+function initScrollSpy() {
+  const main = document.getElementById('mainScroll');
+  const sections = document.querySelectorAll('.section, .hero');
+  const navItems = document.querySelectorAll('.nav-item');
+
+  main.addEventListener('scroll', () => {
+    let current = '';
+    sections.forEach(s => {
+      if (s.offsetTop - 120 <= main.scrollTop) current = s.id;
+    });
+    navItems.forEach(n => {
+      const href = n.getAttribute('href')?.replace('#','');
+      n.classList.toggle('active', href === current);
+    });
+  });
+}
+
+// Init
+window.addEventListener('load', () => {
+  animCounter('mainScore', 88, 1200);
+  animCounter('sideScore', 88, 1400);
+  animBars();
+  initScrollSpy();
+
+  // Open first card in each section by default
+  document.querySelectorAll('.card.open').forEach(c => {
+    c.classList.add('open');
+  });
+});
+</script>
+
+</body>
+</html>
